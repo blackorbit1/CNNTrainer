@@ -1,3 +1,7 @@
+"""
+Auteur : DUTRA Enzo (10/2/2019)
+"""
+
 import subprocess
 
 
@@ -42,7 +46,7 @@ def leterminal(command, terminal):
         terminal.see(tk.END)
         if not err and p.poll is not None: break
 
-    terminal.insert(tk.END, "fin de l'execution du script python")
+    terminal.insert(tk.END, "-")
 
 def changer_xml(balise, attribut, valeur):
     tree = ET.parse("CNNTrainer\\base_de_donnees.xml")
@@ -103,7 +107,7 @@ class Interface(Frame):
         ### --- Sortie du script --- ###
 
         self.text = Text(self.f1)
-        self.text.config(font=("Source Code Pro", 10))
+        self.text.config(font=("Source Code Pro", 9))
         self.text.pack(fill=Y, side=RIGHT)
 
 
@@ -314,10 +318,10 @@ class Interface(Frame):
         """
 
 
-        command = "C:\\Users\\EnzoGamer\\AppData\\Local\\conda\\conda\\envs\\tf_gpu\\python.exe \"C:\\Users\\EnzoGamer\\Desktop\\PROJET IA\\cnn trainer\\CNNTrainer\\script.py\""
+        #command = "C:\\Users\\EnzoGamer\\AppData\\Local\\conda\\conda\\envs\\tf_gpu\\python.exe \"C:\\Users\\EnzoGamer\\Desktop\\PROJET IA\\cnn trainer\\CNNTrainer\\script.py\""
 
-        t = Thread(target = lambda: leterminal(command, self.text))
-        t.start()
+        #t = Thread(target = lambda: leterminal(command, self.text))
+        #t.start()
 
 
 
@@ -336,27 +340,30 @@ class Interface(Frame):
 
         self.bouton_cliquer = Button(self, text="Changer d'interpreteur python", fg="red", command=self.change_pyhton_path)
         self.bouton_cliquer.pack(side="right")
-    def verification_et_lancement(self):
-        try:
-            reprise = False
-            path_modele = ""
-            type_modele = "Inception V3"
-            nb_classes = 0
-            dir_train = ""
-            dir_train_nb_fic = 0
-            dir_validation = ""
-            dir_validation_nb_fic = 0
-            preentrainement = False
-            nb_epoch_preentrainement = 0
-            pas_preentrainement = 0
-            optimiseur_preentrainement = ""
-            nb_epoch_entrainement = 0
-            pas_entrainement = 0
-            optimiseur_entrainement = ""
-            batch_size = 0
 
-            erronne = False
-            erreurs = []
+    def verification_et_lancement(self): ### --- --- On ne peut pas juste faire un include sinon on a pas la sortie du terminal --- --- ###
+        reprise = False
+        path_modele = ""
+        type_modele = "Inception V3"
+        nb_classes = 0
+        dir_train = ""
+        dir_train_nb_fic = 0
+        dir_validation = ""
+        dir_validation_nb_fic = 0
+        preentrainement = False
+        nb_epoch_preentrainement = 0
+        pas_preentrainement = 0
+        optimiseur_preentrainement = ""
+        nb_epoch_entrainement = 0
+        pas_entrainement = 0
+        optimiseur_entrainement = ""
+        batch_size = 0
+
+        erronne = False
+        erreurs = []
+
+        try:
+
 
             if(self.nb_classes_train == 0 and self.nb_classes_validation == 0):
                 erronne = True
@@ -366,13 +373,30 @@ class Interface(Frame):
                 erreurs.append("Le nombre de classes des dossiers de validation et d'entrainement sont différents")
             else:
                 nb_classes = self.nb_classes_train
+                dir_train = self.trainpath
+                for root, dirs, files in os.walk(self.trainpath):
+                    dir_train_nb_fic += len(files)
+                #dir_train_nb_fic = int(len(next(os.walk(self.trainpath))[1]))
+                dir_validation = self.validationpath
+                for root, dirs, files in os.walk(self.validationpath):
+                    dir_validation_nb_fic += len(files)
+                #dir_validation_nb_fic = int(len(next(os.walk(self.validationpath))[1]))
+
+            try:
+                batch_size = int(self.menu_deroulant_valeur_batch_size.get())
+            except:
+                erronne = True
+                erreurs.append("La valeur donnée pour la taille du batch (tampon) n'est pas un entier valide")
 
             if(self.continue_train.get() == 1):
                 reprise = True
                 path_modele = self.modelpath
 
             if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet"]:
-                type_modele = self.menu_deroulant_valeur_modeles.get()
+                if(self.menu_deroulant_valeur_modeles.get() == "Inception V3"):
+                    type_modele = "inceptionv3"
+                elif(self.menu_deroulant_valeur_modeles.get() == "ResNet"):
+                    type_modele = "resnet"
             else:
                 erronne = True
                 erreurs.append("Le modele demandé n'est pas supporté, veuillez entrer un modele parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
@@ -412,6 +436,9 @@ class Interface(Frame):
                 erronne = True
                 erreurs.append("L'optimiseur demandé n'est pas supporté, veuillez entrer un optimiseur parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
 
+
+
+
             if erreurs:
                 texte = ""
                 for erreur in erreurs:
@@ -420,6 +447,35 @@ class Interface(Frame):
 
         except:
             showerror("Erreur", "Erreur lors de l'enregistrement des parametres")
+
+        if not erronne:
+            commande = ''
+
+            commande += self.pythonpath
+            commande += ' "' + os.getcwd() + '\\CNNTrainer\\script.py"'
+
+            commande += ' --reprise "' + ("true" if reprise else "false") + '"'
+            commande += ' --path_modele "' + path_modele + '"'
+            commande += ' --type_modele "' + type_modele + '"'
+            commande += ' --nb_classes  "' + str(nb_classes) + '"'
+            commande += ' --dir_train "' + dir_train + '"'
+            commande += ' --dir_train_nb_fic "' + str(dir_train_nb_fic) + '"'
+            commande += ' --dir_validation "' + dir_validation + '"'
+            commande += ' --dir_validation_nb_fic "' + str(dir_validation_nb_fic) + '"'
+            commande += ' --preentrainement "' + ("true" if preentrainement else "false") + '"'
+            commande += ' --nb_epoch_preentrainement "' + str(nb_epoch_preentrainement) + '"'
+            commande += ' --pas_preentrainement "' + str(pas_preentrainement) + '"'
+            commande += ' --optimiseur_preentrainement "' + optimiseur_preentrainement + '"'
+            commande += ' --nb_epoch_entrainement "' + str(nb_epoch_entrainement) + '"'
+            commande += ' --pas_entrainement "' + str(pas_entrainement) + '"'
+            commande += ' --optimiseur_entrainement "' + optimiseur_entrainement + '"'
+            commande += ' --batch_size "' + str(batch_size) + '"'
+
+            print(commande)
+
+            t = Thread(target = lambda: leterminal(commande, self.text))
+            t.start()
+
 
 
 
