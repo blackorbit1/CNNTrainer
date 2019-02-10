@@ -12,7 +12,7 @@ def import_or_install(package):
         subprocess.check_call(["python", '-m', 'pip', 'install', package]) # install pkg
         #pip.main(['install', package])
 
-dependencies = ["xml", "lxml", "lxml.etree", "tkinter"]
+dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath"]
 for package in dependencies:
     import_or_install(package)
 
@@ -24,6 +24,7 @@ import tkinter as tk
 from threading import Thread
 import xml.etree.ElementTree as ET
 from lxml import etree
+import ntpath
 
 def leterminal(command, terminal):
     p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True, shell = True, encoding="utf8")
@@ -73,6 +74,7 @@ class Interface(Frame):
 
         self.padding = 10
 
+        self.modelpath = ""
         self.trainpath = ""
         self.validationpath = ""
         self.pythonpath = ""
@@ -114,29 +116,46 @@ class Interface(Frame):
         self.case_continue_train = Checkbutton(self.continuer_entraienment,
                                                text="Continuer un entrainement",
                                                variable=self.continue_train,
-                                               command=self.griser_bouton_continuer).pack()
+                                               command=self.griser_bouton_continuer)
+        self.case_continue_train.grid(row=0, columnspan=2)
+
+        self.label_modele_repris = Label(self.continuer_entraienment, text="Aucun fichier ")
+        self.label_modele_repris.grid(row=1)
 
         #self.filepath = askopenfilename(title="Ouvrir une image",filetypes=[('png files','.png'),('all files','.*')])
         #self.photo = PhotoImage(file=self.filepath)
         self.bouton_choose_model = Button(self.continuer_entraienment, text="Choisir un modèle", command=self.choose_model, state=DISABLED)
-        self.bouton_choose_model.pack()
+        self.bouton_choose_model.grid(row=1, column=1)
 
 
-        ### --- Type de model --- ###
+        ### --- Base --- ###
 
-        self.types_modele = LabelFrame(self.f1, text="Type de modele")
-        self.types_modele.pack(fill=X, side=TOP, expand="yes", padx=self.padding, pady=self.padding)
+        self.base = LabelFrame(self.f1, text="Base")
+        self.base.pack(fill=X, side=TOP, expand="yes", padx=self.padding, pady=self.padding)
 
-        self.label_nb_epoch = Label(self.types_modele, text="Type de modele: ")
-        self.label_nb_epoch.pack(side="left")
+        self.label_nb_epoch = Label(self.base, text="Type de modele: ")
+        self.label_nb_epoch.grid(row=0)
 
 
         self.menu_deroulant_valeur_modeles = StringVar(value='Inception V3')
-        self.menu_deroulant_modeles = tkk.Combobox(self.types_modele, textvariable=self.menu_deroulant_valeur_modeles)
-        self.menu_deroulant_modeles.pack(side="right")
+        self.menu_deroulant_modeles = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_modeles)
+        self.menu_deroulant_modeles.grid(row=0, column=1)
         self.menu_deroulant_modeles.bind('>', self.on_value_change)
         self.liste_modeles = ['Inception V3', 'ResNet']
         self.menu_deroulant_modeles['values'] =  self.liste_modeles
+
+
+
+
+        self.label_batch_size = Label(self.base, text="Taille batch: ")
+        self.label_batch_size.grid(row=1)
+
+        self.menu_deroulant_valeur_batch_size = StringVar(value='32')
+        self.menu_deroulant_batch_size = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_batch_size)
+        self.menu_deroulant_batch_size.grid(row=1, column=1)
+        self.menu_deroulant_batch_size.bind('>', self.on_value_change)
+        self.liste_batch_size = ["8", "16", "32", "64", "128"]
+        self.menu_deroulant_batch_size['values'] =  self.liste_batch_size
 
         """
         self.liste_types_modeles = ('Inception V3', 'ResNet')
@@ -285,7 +304,7 @@ class Interface(Frame):
         self.cadre_lancer_entrainement = Frame(self.f1, borderwidth=20, relief=FLAT)
         self.cadre_lancer_entrainement.pack(fill=X, side=TOP, expand="yes", padx=self.padding, pady=self.padding)
 
-        self.bouton_lancer_entrainement = Button(self.cadre_lancer_entrainement, text="Lancer l'entrainement !", command=self.choose_dataset_validation)
+        self.bouton_lancer_entrainement = Button(self.cadre_lancer_entrainement, text="Lancer l'entrainement !", command=self.verification_et_lancement)
         self.bouton_lancer_entrainement.pack(side="bottom")
 
         """
@@ -317,6 +336,94 @@ class Interface(Frame):
 
         self.bouton_cliquer = Button(self, text="Changer d'interpreteur python", fg="red", command=self.change_pyhton_path)
         self.bouton_cliquer.pack(side="right")
+    def verification_et_lancement(self):
+        try:
+            reprise = False
+            path_modele = ""
+            type_modele = "Inception V3"
+            nb_classes = 0
+            dir_train = ""
+            dir_train_nb_fic = 0
+            dir_validation = ""
+            dir_validation_nb_fic = 0
+            preentrainement = False
+            nb_epoch_preentrainement = 0
+            pas_preentrainement = 0
+            optimiseur_preentrainement = ""
+            nb_epoch_entrainement = 0
+            pas_entrainement = 0
+            optimiseur_entrainement = ""
+            batch_size = 0
+
+            erronne = False
+            erreurs = []
+
+            if(self.nb_classes_train == 0 and self.nb_classes_validation == 0):
+                erronne = True
+                erreurs.append("Aucune classe n'est fournie")
+            elif(self.nb_classes_train != self.nb_classes_validation):
+                erronne = True
+                erreurs.append("Le nombre de classes des dossiers de validation et d'entrainement sont différents")
+            else:
+                nb_classes = self.nb_classes_train
+
+            if(self.continue_train.get() == 1):
+                reprise = True
+                path_modele = self.modelpath
+
+            if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet"]:
+                type_modele = self.menu_deroulant_valeur_modeles.get()
+            else:
+                erronne = True
+                erreurs.append("Le modele demandé n'est pas supporté, veuillez entrer un modele parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
+
+            if self.active_pre_entrainement.get() == 1:
+                preentrainement = True
+                try:
+                    pas_preentrainement = float(self.menu_deroulant_valeur_pas_preentrainement.get())
+                except:
+                    erronne = True
+                    erreurs.append("La valeur donnée pour la taille de pas du préentrainement n'est pas un reel valide")
+                try:
+                    nb_epoch_preentrainement = int(self.menu_deroulant_valeur_epoch_preentrainement.get())
+                except:
+                    erronne = True
+                    erreurs.append("La valeur donnée pour le nb d'epoch du préentrainement n'est pas un entier valide")
+                if self.menu_deroulant_valeur_optimiseur_preentrainement.get() in ["RMSprop", "Adam", "SGD"]:
+                    optimiseur_preentrainement = self.menu_deroulant_valeur_optimiseur_preentrainement.get()
+                else:
+                    erronne = True
+                    erreurs.append("L'optimiseur demandé n'est pas supporté, veuillez entrer un optimiseur parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
+
+
+            try:
+                pas_entrainement = float(self.menu_deroulant_valeur_pas_entrainement.get())
+            except:
+                erronne = True
+                erreurs.append("La valeur donnée pour la taille de pas de l'entrainement n'est pas un reel valide")
+            try:
+                nb_epoch_entrainement = int(self.menu_deroulant_valeur_epoch_entrainement.get())
+            except:
+                erronne = True
+                erreurs.append("La valeur donnée pour le nb d'epoch du entrainement n'est pas un entier valide")
+            if self.menu_deroulant_valeur_optimiseur_entrainement.get() in ["RMSprop", "Adam", "SGD"]:
+                optimiseur_entrainement = self.menu_deroulant_valeur_optimiseur_entrainement.get()
+            else:
+                erronne = True
+                erreurs.append("L'optimiseur demandé n'est pas supporté, veuillez entrer un optimiseur parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
+
+            if erreurs:
+                texte = ""
+                for erreur in erreurs:
+                    texte += " - " + erreur + "\n"
+                showerror("Erreur", texte)
+
+        except:
+            showerror("Erreur", "Erreur lors de l'enregistrement des parametres")
+
+
+
+
     def choose_dataset_train(self):
         temp = askdirectory(title="Dossier contenant les images à utiliser lors de l'entrainement")
         if(os.path.exists(temp) and int(len(next(os.walk(temp))[1])) > 0):
@@ -389,7 +496,12 @@ class Interface(Frame):
             print("le chemin que vous venez de donner n'est pas valide")
 
     def choose_model(self):
-        self.modelpath = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('h5 files','.h5'),('all files','.*')])
+        temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('h5 files','.h5'),('all files','.*')])
+        if(os.path.isfile(temp) and os.path.splitext(temp)[1] == ".h5"):
+            self.modelpath = temp
+            self.label_modele_repris["text"] = ntpath.basename(temp)
+        else:
+            showerror("Fichier invalide", "Le fichier que vous indiquez n'est pas valide !")
 
 
 
