@@ -248,6 +248,10 @@ config.gpu_options.allow_growth = True
 session = tf.Session(config=config)
 set_session(session)
 
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
 
 print(device_lib.list_local_devices())
 #tf.Session(config=tf.ConfigProto(allow_growth=True))
@@ -388,7 +392,7 @@ if preentrainement:
         samples_per_epoch=dir_train_nb_fic,
         validation_data=validation_generator,
         #nb_val_samples=dir_validation_nb_fic,
-        class_weight='auto'
+        #class_weight='auto'
     )
 
 
@@ -396,30 +400,37 @@ if preentrainement:
 setup_to_finetune(model, pas_entrainement, optimiseur_entrainement)
 
 print("\n\n--- --- Lancement de l'entrainement --- ---\n")
+"""
 print(dir_validation_nb_fic // batch_size)
 print(dir_validation_nb_fic)
 print(batch_size)
 print(args.dir_validation_nb_fic)
 print(args.batch_size)
+"""
+#from sklearn.utils import class_weight
+#import numpy as np
+# train the model on the new data for a few epochs
+#class_weight = class_weight.compute_class_weight('balanced', np.unique(train_generator), train_generator)
 
 history_ft = model.fit_generator(
     train_generator,                                        # generateur de nouvelles image d'entrainement
     samples_per_epoch=dir_train_nb_fic,                     # nb de fichiers d'entrainement
-    nb_epoch=nb_epoch_entrainement,                         # nb de cycles d'entrainement
+    epochs=nb_epoch_entrainement,                            # nb de cycles d'entrainement
     workers=1,                                              # nb d'user travaillant dessus (laisser 1 si GPU)
     use_multiprocessing=False,                              # laisser False si GPU
     steps_per_epoch=dir_train_nb_fic // batch_size,         # nb fic entrainement / taille tampon
     validation_steps=dir_validation_nb_fic // batch_size,   # nb fic validation / taille tampon
     validation_data=validation_generator,                   # generateur de nouvelles image de validation
     #nb_val_samples=dir_validation_nb_fic,                  # nb fichiers de validation (laisser en com)
-    class_weight='auto',
+    class_weight="auto",
+    #verbose=2
 )
-
-print("\n\nEnregistrement du fichier " + dir_modele + " ....")
-model.save_weights(dir_modele)  # always save your weights after training or during training
 
 print("""
     ╔══════════════════════════════════════════════════════╗
     ║          Entrainement terminé, à bientot !           ║
     ╚══════════════════════════════════════════════════════╝
 """)
+
+print("\n\nEnregistrement du fichier " + dir_modele + " ....")
+model.save_weights(dir_modele)  # always save your weights after training or during training
