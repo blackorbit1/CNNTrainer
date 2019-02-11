@@ -30,23 +30,54 @@ import xml.etree.ElementTree as ET
 from lxml import etree
 import ntpath
 
-def leterminal(command, terminal):
-    p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=1, universal_newlines=True, shell = True, encoding="utf8")
+def leterminal(command, terminal, processing_bar, bouton_lancer_entrainement):
+    running = True
+    bouton_lancer_entrainement.config(state=DISABLED)
+    processing_bar["value"] = 1
+    p = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, bufsize=1, universal_newlines=True, shell = True)
     p.poll()
+    processing_bar["value"] = 3
 
-    while True:
+    terminal.insert(tk.END, "> Lancement de l'execution du script d'entrainement")
+    terminal.see(tk.END)
+
+    while running:
         line = p.stdout.readline()
+        """
+        err = p.stderr.readline()
+        terminal.insert(tk.END, err)
+        terminal.see(tk.END)
+        """
+        if "Enregistrement du fichier" in line:
+            running = False
+        if "Lancement de l'entrainement ..." in line:
+            processing_bar["value"] = 5
+        if "Epoch " in line:
+            avancement = line[6:]
+            #print(avancement)
+            actuel, final = avancement.split("/")
+            #print("actuel : " + actuel + " / final : " + final)
+            final_amount = int(actuel) * 100 / int(final)
+            #print(int(final_amount))
+            processing_bar["value"] = final_amount
+
         terminal.insert(tk.END, line)
         terminal.see(tk.END)
         if not line and p.poll is not None: break
 
-    while True:
+    """
+    while running:
         err = p.stderr.readline()
         terminal.insert(tk.END, err)
         terminal.see(tk.END)
         if not err and p.poll is not None: break
+    """
 
+    processing_bar["value"] = 0
+    bouton_lancer_entrainement.config(state=NORMAL)
     terminal.insert(tk.END, "-")
+
+
 
 def changer_xml(balise, attribut, valeur):
     tree = ET.parse("CNNTrainer\\base_de_donnees.xml")
@@ -107,7 +138,7 @@ class Interface(Frame):
         ### --- Sortie du script --- ###
 
         self.text = Text(self.f1)
-        self.text.config(font=("Source Code Pro", 9))
+        self.text.config(font=("Source Code Pro", 8))
         self.text.pack(fill=Y, side=RIGHT)
 
 
@@ -317,6 +348,17 @@ class Interface(Frame):
             print(name)
         """
 
+        ### --- Bar de chargement --- ###
+
+        # Prepare the type of Progress bar needed.
+        # Look out for determinate mode and pick the suitable one
+        # Other formats of display can be suitably explored
+        self.processing_bar = tkk.Progressbar(self.f1, orient='horizontal', length=300, value=0, maximum=100)
+
+        # Place the bar at the centre of the window
+        self.processing_bar.place(relx=0.5, rely=0.5, anchor=CENTER)
+        self.processing_bar.pack(fill=X, side=BOTTOM, expand="yes")
+
 
         #command = "C:\\Users\\EnzoGamer\\AppData\\Local\\conda\\conda\\envs\\tf_gpu\\python.exe \"C:\\Users\\EnzoGamer\\Desktop\\PROJET IA\\cnn trainer\\CNNTrainer\\script.py\""
 
@@ -473,7 +515,7 @@ class Interface(Frame):
 
             print(commande)
 
-            t = Thread(target = lambda: leterminal(commande, self.text))
+            t = Thread(target = lambda: leterminal(commande, self.text, self.processing_bar, self.bouton_lancer_entrainement))
             t.start()
 
 
@@ -563,6 +605,7 @@ class Interface(Frame):
 
 
 fenetre = Tk()
+fenetre.title("CNNTrainer")
 interface = Interface(fenetre)
 
 interface.mainloop()
