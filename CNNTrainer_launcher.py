@@ -1,5 +1,7 @@
+#!C:/Users/EnzoGamer/AppData/Local/conda/conda/envs/tf_gpu/python.exe
+path = "C:/Users/EnzoGamer/AppData/Local/conda/conda/envs/tf_gpu/python.exe"
 """
-Auteur : DUTRA Enzo (10/2/2019)
+Auteur : DUTRA Enzo (14/2/2019)
 """
 
 import subprocess
@@ -23,7 +25,7 @@ for package in dependencies:
 from tkinter import *
 from tkinter.filedialog import *
 from tkinter import ttk as tkk
-from tkinter.messagebox import showerror
+from tkinter.messagebox import showerror, showinfo
 import tkinter as tk
 from threading import Thread
 import xml.etree.ElementTree as ET
@@ -48,6 +50,17 @@ def isfloat(value):
   except ValueError:
     return False
 
+def change_path(path):
+    content = []
+    with open(__file__,"r", encoding="ISO-8859-1") as f:
+        for line in f:
+            content.append(line)
+    
+    with open(__file__,"w", encoding="ISO-8859-1") as f:
+        content[0] = "#!{n}\n".format(n=path)
+        content[1] = "path = \"{n}\"\n".format(n=path)
+        for i in range(len(content)):
+            f.write(content[i])
 
 class Logger(object):
     def __init__(self, terminal):
@@ -518,7 +531,7 @@ class Interface(Frame):
         self.nb_classes = 0
         self.nb_classes_train = 0
         self.nb_classes_validation = 0
-        temp = voir_xml(balise="pyhton_path", attribut="path")
+        temp = path
         if(os.path.isfile(temp)):
                 self.pythonpath = temp
 
@@ -991,19 +1004,19 @@ class Interface(Frame):
             self.bouton_choose_model.config(state=DISABLED)
 
     def change_pyhton_path(self):
-        self.choose_pyhton_path()
+        temp = askopenfilename(title="Indiquer l'interpreteur python à utiliser",filetypes=[('python','.*'),('all files','.*')])
+        if(os.path.isfile(temp)):
+            self.pythonpath = temp
+            change_path(temp)
+            #changer_xml(balise="pyhton_path", attribut="path", valeur=temp)
+        else:
+            print("le chemin que vous venez de donner n'est pas valide")
         print("affichage de pythonpath :")
         print(self.pythonpath)
         print("modification du label de texte ..")
         self.label_pythonpath["text"] = "Chemin vers l'interpreteur python: " + self.pythonpath
-
-    def choose_pyhton_path(self):
-        temp = askopenfilename(title="Indiquer l'interpreteur python à utiliser",filetypes=[('python','.*'),('all files','.*')])
-        if(os.path.isfile(temp)):
-            self.pythonpath = temp
-            changer_xml(balise="pyhton_path", attribut="path", valeur=temp)
-        else:
-            print("le chemin que vous venez de donner n'est pas valide")
+        showinfo("Modification de l'interpreteur python", "CNNTrainer va quitter, lorsque vous le rouvrirez il s'executera normalement sur le bon interpreteur")
+        sys.exit()
 
     def choose_model(self):
         temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('h5 files','.h5'),('all files','.*')])
