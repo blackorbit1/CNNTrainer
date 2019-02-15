@@ -32,6 +32,13 @@ import xml.etree.ElementTree as ET
 from lxml import etree
 import ntpath
 
+from keras.layers import Dense, GlobalAveragePooling2D
+from keras.models import Model
+from PIL import Image
+from keras.preprocessing import image
+import numpy as np
+from keras.applications.inception_v3 import preprocess_input
+
 import sys
 import os
 
@@ -786,6 +793,77 @@ class Interface(Frame):
 
 
 
+        ### ### ### === === TEST D'UN MODELE === === ### ### ###
+
+
+
+
+
+
+        self.trainedmodelpath = ""
+        self.liste_classes = []
+        self.nb_classes = 0
+        self.cnn_a_tester = None
+
+
+        ### --- Choix du modele a tester --- ###
+
+        self.test_model = LabelFrame(self.f2, text="Modèle")
+        self.test_model.grid(row=0, padx=self.padding, pady=self.padding)
+
+        self.label_test_model = Label(self.test_model, text="Aucun fichier ")
+        self.label_test_model.grid(row=1)
+
+        #self.filepath = askopenfilename(title="Ouvrir une image",filetypes=[('png files','.png'),('all files','.*')])
+        #self.photo = PhotoImage(file=self.filepath)
+        self.bouton_choose_test_model = Button(self.test_model, text="Choisir un modèle", command=self.choose_test_model)
+        self.bouton_choose_test_model.grid(row=1, column=1)
+
+        
+        ### --- Indication des différentes classes --- ###
+
+
+        self.test_classes = LabelFrame(self.f2, text="Classes")
+        self.test_classes.grid(row=1, padx=self.padding, pady=self.padding)
+
+        self.label_nb_classes_test = Label(self.test_classes, text="0 classe trouvée")
+        self.label_nb_classes_test.pack()
+
+        self.texte_classes = Text(self.test_classes)
+        self.texte_classes.config(font=("Source Code Pro", 8), width=50)
+        self.texte_classes.pack()
+
+        self.cadre_actualiser_classes = Frame(self.test_classes, borderwidth=20, relief=FLAT)
+        self.cadre_actualiser_classes.pack()
+
+        self.bouton_lancer_entrainement = Button(self.cadre_actualiser_classes, text="Actualiser", command=self.actualiser_classes_test)
+        self.bouton_lancer_entrainement.pack(side="bottom")
+
+
+        ### --- Test de l'image --- ###
+
+        self.test_image = LabelFrame(self.f2, text="Test")
+        self.test_image.grid(row=0, column=1, rowspan=20, padx=self.padding, pady=self.padding)
+
+        self.test_image_cadre = Canvas(self.test_image, width=500, height=500)
+        #self.test_image_cadre.create_image(0, 0, anchor=NW)
+        self.test_image_cadre.grid(row=0, columnspan=2)
+
+        self.label_test_image = Label(self.test_image, text="Image : Aucun fichier ")
+        self.label_test_image.grid(row=1)
+
+        #self.filepath = askopenfilename(title="Ouvrir une image",filetypes=[('png files','.png'),('all files','.*')])
+        #self.photo = PhotoImage(file=self.filepath)
+        self.bouton_choose_test_image = Button(self.test_image, text="Choisir une image", command=self.choose_test_image)
+        self.bouton_choose_test_image.grid(row=1, column=1)
+
+
+        self.label_test_reponse = Label(self.test_image, text="...")
+        self.label_test_reponse.grid(row=2)
+
+        self.label_test_suretee = Label(self.test_image, text="0 %")
+        self.label_test_suretee.grid(row=3)
+
 
 
 
@@ -1026,7 +1104,102 @@ class Interface(Frame):
         else:
             showerror("Fichier invalide", "Le fichier que vous indiquez n'est pas valide !")
 
+    def choose_test_model(self):
+        temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('h5 files','.h5'),('all files','.*')])
+        if(os.path.isfile(temp) and os.path.splitext(temp)[1] == ".h5"):
+            self.trainedmodelpath = temp
+            self.label_test_model["text"] = ntpath.basename(temp)
+            if self.cnn_a_tester is None:
+                self.cnn_a_tester = CNN_a_tester()
+            self.cnn_a_tester.path_to_model_weights = temp
+        else:
+            showerror("Fichier invalide", "Le fichier que vous indiquez n'est pas valide !")
 
+    def actualiser_classes_test(self):
+        self.liste_classes = []
+        self.liste_classes = self.texte_classes.get("1.0",END).split("\n")
+        self.liste_classes.remove('')
+        self.nb_classes = len(self.liste_classes)
+        self.label_nb_classes_test["text"] = str(self.nb_classes) + " classes trouvées"
+        if self.cnn_a_tester is None:
+            self.cnn_a_tester = CNN_a_tester()
+        self.cnn_a_tester.nb_classes = self.nb_classes
+        self.cnn_a_tester.categories = self.liste_classes
+        self.cnn_a_tester.actualiser()
+        #print(self.liste_classes)
+
+    def choose_test_image(self):
+        temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('all files','.*'),('péaingé','.png'),('jipégé','.jpg'),('jife','.gif')])
+        if(os.path.isfile(temp)):
+            if self.cnn_a_tester is None:
+                self.cnn_a_tester = CNN_a_tester()
+            reponse, suretee, img = self.cnn_a_tester.predict(temp)
+            self.label_test_image["text"] = "Image : " + temp
+            self.label_test_reponse["text"] = reponse
+            self.label_test_suretee["text"] = str(suretee) + " %"
+            """
+            photo = PhotoImage(file=temp)
+            self.test_image_cadre.create_image(200, 200, image=photo)
+            """
+            #self.logocadre.place(x=200, y=200, anchor=NW)
+        else:
+            showerror("Image invalide", "L'image que vous indiquez n'est pas valide !")
+
+
+class CNN_a_tester():
+
+    def __init__(self):
+        import tensorflow as tf
+        import glob
+        from keras import __version__
+        from keras.applications.inception_v3 import InceptionV3
+        from keras.preprocessing.image import ImageDataGenerator
+        from keras.optimizers import SGD
+
+        self.config = tf.ConfigProto()
+        self.config.gpu_options.allow_growth = True
+        self.session = tf.Session(config=self.config)
+
+        self.target_size = (150, 150)
+        self.categories = []
+        self.nb_classes = 0
+        self.path_to_model_weights = ""
+
+        self.base_model = InceptionV3(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
+        
+    def actualiser(self):
+        self.x = self.base_model.output
+        self.x = GlobalAveragePooling2D()(self.x)
+        self.x = Dense(self.nb_classes, activation='relu')(self.x) #new FC layer, random init
+        self.predictions = Dense(5, activation='softmax')(self.x) #new softmax layer
+        self.model = Model(input=self.base_model.input, output=self.predictions)
+        self.model.load_weights(self.path_to_model_weights)
+        
+
+    def predict(self, path):
+        img = Image.open(path)
+        if img.size != self.target_size:
+            img = img.resize(self.target_size)
+        x = image.img_to_array(img)
+        x = np.expand_dims(x, axis=0)
+        x = preprocess_input(x)
+        preds = self.model.predict(x)
+        preds_et_probas = {}
+        #print(preds[0])
+        for categorie, proba in zip(self.categories, preds[0]):
+            #print(categorie + " : " + str(proba))
+            preds_et_probas[categorie] = proba
+        liste_triee = sorted(preds_et_probas, key=preds_et_probas.__getitem__, reverse=True)
+        #print(liste_triee)
+        suretee = max(preds[0]) * 100
+        #print("suretee" + str(suretee))
+
+        return liste_triee[0], suretee, img
+        """
+        except:
+            print("Erreur !")
+            return "", 0
+        """
 
 
 fenetre = Tk()
