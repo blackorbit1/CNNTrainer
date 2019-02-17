@@ -104,11 +104,17 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     bouton_lancer_entrainement.config(state=DISABLED)
     print("\n")
     print(os.getcwd())
-    
+
+    from time import time
+    from keras.callbacks import TensorBoard
+
+
     import glob
     import argparse
     #import matplotlib.pyplot as plt
     from keras.applications.inception_v3 import InceptionV3, preprocess_input
+    from keras.applications.inception_resnet_v2 import InceptionResNetV2
+    from keras.applications.resnet50 import ResNet50
     from keras.models import Model
     from keras.layers import Dense, GlobalAveragePooling2D
     from keras.preprocessing.image import ImageDataGenerator
@@ -117,6 +123,9 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     from tensorflow.python.client import device_lib
     import tensorflow as tf
     from keras.backend.tensorflow_backend import set_session
+    
+
+    
     
     config = tf.ConfigProto(
         gpu_options = tf.GPUOptions(force_gpu_compatible = True)
@@ -195,20 +204,22 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     
     
     
+    if not reprise:
+        # nom automatique du modele généré
+        dir_modele = "model_"
+        nb_modele_dir = 1
+        while os.path.isfile(dir_modele + str(nb_modele_dir) + ".h5"):
+            nb_modele_dir += 1
+        dir_modele = dir_modele + str(nb_modele_dir) + ".h5"
     
-    # nom automatique du modele généré
-    dir_modele = "model_"
-    nb_modele_dir = 1
-    while os.path.isfile(dir_modele + str(nb_modele_dir) + ".h5"):
-        nb_modele_dir += 1
-    dir_modele = dir_modele + str(nb_modele_dir) + ".h5"
-    
+    """   
     # Si l'user avait demandé de continuer l'entrainement d'un CNN déjà existant
     if user_input == 'c':
         while not os.path.isfile(dir_modele):
             entree_user = input("Donnez le chemin vers le modele que vous voulez continuer à entrainer :\n> ")
             dir_modele = entree_user
-    
+    """
+
     print("\nLe directory du fichier contenant le CNN qui sera enregistré : " + dir_modele + "\n")
     
     
@@ -249,12 +260,16 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     # setup model
     if(type_modele == "resnet"):
         base_model = ResNet50(weights='imagenet', include_top=False)
+    elif(type_modele == "inceptionresnetv2"):
+    	base_model = InceptionResNetV2(weights='imagenet', include_top=False)
     else:
         base_model = InceptionV3(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
     model = add_new_last_layer(base_model, nb_classes)
     
     if reprise:
         model.load_weights(dir_modele)
+
+    tensorboard = TensorBoard(log_dir = "./logs", histogram_freq=0, write_graph=True, write_images=False)
     
     #model.summary() # Afficher le CNN en entier
     
@@ -304,6 +319,7 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
         validation_data=validation_generator,                   # generateur de nouvelles image de validation
         #nb_val_samples=dir_validation_nb_fic,                  # nb fichiers de validation (laisser en com)
         class_weight="auto",
+        callbacks = [tensorboard]
         #verbose=2
     )
     
@@ -314,7 +330,7 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     """)
     
     print("\n\nEnregistrement du fichier " + dir_modele + " ....")
-    model.save_weights(dir_modele)  # always save your weights after training or during training
+    model.save(dir_modele)  # always save your weights after training or during training
     print("fichier enregistré !")
     bouton_lancer_entrainement.config(state=NORMAL)
 
@@ -328,8 +344,11 @@ def setup_to_transfer_learn(model, base_model, pas_preentrainement, optimiseur_p
     if(optimiseur_preentrainement == "RMSprop"):
         optimiseur = RMSprop(lr=pas_preentrainement, rho=0.9, epsilon=None, decay=0.0)
         model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
-    elif optimiseur_preentrainement == "Adam":
-        optimiseur = Adam(lr=pas_preentrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+    elif optimiseur_entrainement == "AMSGrad":
+        optimiseur = Adam(lr=pas_entrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8, amsgrad=True)
+        model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
+    elif optimiseur_entrainement == "Adam":
+        optimiseur = Adam(lr=pas_entrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8, amsgrad=False)
         model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
     elif optimiseur_preentrainement == "SGD":
         optimiseur = SGD(lr=pas_preentrainement, momentum=0.0, decay=0.0, nesterov=False)
@@ -431,8 +450,11 @@ def setup_to_finetune(model, pas_entrainement, optimiseur_entrainement):
     if(optimiseur_entrainement == "RMSprop"):
         optimiseur = RMSprop(lr=pas_entrainement, rho=0.9, epsilon=None, decay=0.0)
         model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
+    elif optimiseur_entrainement == "AMSGrad":
+        optimiseur = Adam(lr=pas_entrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8, amsgrad=True)
+        model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
     elif optimiseur_entrainement == "Adam":
-        optimiseur = Adam(lr=pas_entrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8)
+        optimiseur = Adam(lr=pas_entrainement, beta_1=0.9, beta_2=0.999, epsilon=1e-8, amsgrad=False)
         model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
     elif optimiseur_entrainement == "SGD":
         optimiseur = SGD(lr=pas_entrainement, momentum=0.0, decay=0.0, nesterov=False)
@@ -598,7 +620,7 @@ class Interface(Frame):
         self.menu_deroulant_modeles = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_modeles)
         self.menu_deroulant_modeles.grid(row=0, column=1)
         self.menu_deroulant_modeles.bind('>', self.on_value_change)
-        self.liste_modeles = ['Inception V3', 'ResNet']
+        self.liste_modeles = ["Inception V3",  "Inception-ResNet V2", "ResNet"]
         self.menu_deroulant_modeles['values'] =  self.liste_modeles
 
 
@@ -675,7 +697,7 @@ class Interface(Frame):
         self.menu_deroulant_optimiseur_preentrainement = tkk.Combobox(self.pre_entrainement, textvariable=self.menu_deroulant_valeur_optimiseur_preentrainement)
         self.menu_deroulant_optimiseur_preentrainement.grid(row=3, column=1)
         self.menu_deroulant_optimiseur_preentrainement.bind('>', self.on_value_change)
-        self.liste_optimiseur_preentrainement = ["RMSprop", "Adam", "SGD"]
+        self.liste_optimiseur_preentrainement = ["RMSprop", "Adam", "AMSGrad", "SGD"]
         self.menu_deroulant_optimiseur_preentrainement['values'] =  self.liste_optimiseur_preentrainement
 
 
@@ -733,7 +755,7 @@ class Interface(Frame):
         self.menu_deroulant_optimiseur_entrainement = tkk.Combobox(self.entrainement, textvariable=self.menu_deroulant_valeur_optimiseur_entrainement)
         self.menu_deroulant_optimiseur_entrainement.grid(row=3, column=1)
         self.menu_deroulant_optimiseur_entrainement.bind('>', self.on_value_change)
-        self.liste_optimiseur_entrainement = ["RMSprop", "Adam", "SGD"]
+        self.liste_optimiseur_entrainement = ["RMSprop", "Adam", "AMSGrad", "SGD"]
         self.menu_deroulant_optimiseur_entrainement['values'] =  self.liste_optimiseur_entrainement
 
 
@@ -927,11 +949,13 @@ class Interface(Frame):
                 reprise = True
                 path_modele = self.modelpath
 
-            if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet"]:
+            if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet", "Inception-ResNet V2"]:
                 if(self.menu_deroulant_valeur_modeles.get() == "Inception V3"):
                     type_modele = "inceptionv3"
                 elif(self.menu_deroulant_valeur_modeles.get() == "ResNet"):
                     type_modele = "resnet"
+                elif(self.menu_deroulant_valeur_modeles.get() == "Inception-ResNet V2"):
+                	type_modele = "inceptionresnetv2"
             else:
                 erronne = True
                 erreurs.append("Le modele demandé n'est pas supporté, veuillez entrer un modele parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
@@ -948,7 +972,7 @@ class Interface(Frame):
                 except:
                     erronne = True
                     erreurs.append("La valeur donnée pour le nb d'epoch du préentrainement n'est pas un entier valide")
-                if self.menu_deroulant_valeur_optimiseur_preentrainement.get() in ["RMSprop", "Adam", "SGD"]:
+                if self.menu_deroulant_valeur_optimiseur_preentrainement.get() in ["RMSprop", "Adam", "AMSGrad", "SGD"]:
                     optimiseur_preentrainement = self.menu_deroulant_valeur_optimiseur_preentrainement.get()
                 else:
                     erronne = True
@@ -965,7 +989,7 @@ class Interface(Frame):
             except:
                 erronne = True
                 erreurs.append("La valeur donnée pour le nb d'epoch du entrainement n'est pas un entier valide")
-            if self.menu_deroulant_valeur_optimiseur_entrainement.get() in ["RMSprop", "Adam", "SGD"]:
+            if self.menu_deroulant_valeur_optimiseur_entrainement.get() in ["RMSprop", "Adam", "AMSGrad", "SGD"]:
                 optimiseur_entrainement = self.menu_deroulant_valeur_optimiseur_entrainement.get()
             else:
                 erronne = True
@@ -1153,6 +1177,8 @@ class CNN_a_tester():
         import glob
         from keras import __version__
         from keras.applications.inception_v3 import InceptionV3
+        from keras.applications.inception_resnet_v2 import InceptionResNetV2
+        from keras.applications.resnet50 import ResNet50
         from keras.preprocessing.image import ImageDataGenerator
         from keras.optimizers import SGD
 
@@ -1165,13 +1191,13 @@ class CNN_a_tester():
         self.nb_classes = 0
         self.path_to_model_weights = ""
 
-        self.base_model = InceptionV3(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
+        self.base_model = InceptionResNetV2(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
         
     def actualiser(self):
         self.x = self.base_model.output
         self.x = GlobalAveragePooling2D()(self.x)
         self.x = Dense(self.nb_classes, activation='relu')(self.x) #new FC layer, random init
-        self.predictions = Dense(5, activation='softmax')(self.x) #new softmax layer
+        self.predictions = Dense(self.nb_classes, activation='softmax')(self.x) #new softmax layer
         self.model = Model(input=self.base_model.input, output=self.predictions)
         self.model.load_weights(self.path_to_model_weights)
         
