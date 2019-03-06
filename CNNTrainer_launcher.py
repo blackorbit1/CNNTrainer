@@ -6,19 +6,37 @@ Auteur : DUTRA Enzo (14/2/2019)
 
 import subprocess
 
+dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath"]
 
 def import_or_install(package):
     try:
         __import__(package)
     except ImportError:
-        subprocess.check_call(["python", '-m', 'pip', 'install', package]) # install pkg
-        #pip.main(['install', package])
+        print("Certains modules ne sont pas installés, installation ...")
+        try:
+            subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
+            #pip.main(['install', package])
+        except:
+            try:
+                subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
+                #pip.main(['install', package])
+            except:
+                print("Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
+                print(dependencies)
     except ModuleNotFoundError:
-        print("le module n'a pas été trouvé, installation ...")
-        subprocess.check_call(["python", '-m', 'pip', 'install', package]) # install pkg
-        #pip.main(['install', package])
+        print("Certains modules ne sont pas installés, installation ...")
+        try:
+            subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
+            #pip.main(['install', package])
+        except:
+            try:
+                subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
+                #pip.main(['install', package])
+            except:
+                print("Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
+                print(dependencies)
 
-dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath"]
+
 for package in dependencies:
     import_or_install(package)
 
@@ -44,8 +62,8 @@ import os
 
 RMSPROP_LR_DEFAULT = 0.001
 ADAM_LR_DEFAULT = 0.001
-BATCH_SIZE_DEFAULT = 32
-IM_WIDTH, IM_HEIGHT = 150, 150 # fixed size for InceptionV3
+BATCH_SIZE_DEFAULT = 16
+IM_WIDTH, IM_HEIGHT = 256, 256 # fixed size for InceptionV3
 NB_IV3_LAYERS_TO_FREEZE = 172 # nb de couches d'inception V3 à laisser statique
 
 user_input = ''
@@ -98,6 +116,10 @@ class Logger(object):
         #this handles the flush command by doing nothing.
         #you might want to specify some extra behavior here.
         pass    
+
+
+def run_dataset_configuration(data_dir, nb_images_augmentation, liste_options_augmentation):
+	pass
 
 
 def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement):
@@ -1186,7 +1208,7 @@ class CNN_a_tester():
         self.config.gpu_options.allow_growth = True
         self.session = tf.Session(config=self.config)
 
-        self.target_size = (150, 150)
+        self.target_size = (299, 299)
         self.categories = []
         self.nb_classes = 0
         self.path_to_model_weights = ""
