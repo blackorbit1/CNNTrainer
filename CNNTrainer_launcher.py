@@ -5,8 +5,11 @@ Auteur : DUTRA Enzo (14/2/2019)
 """
 
 import subprocess
+import traceback
+import trace 
+import threading
 
-dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath"]
+dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath", "Augmentor", "torchvision"]
 
 def import_or_install(package):
     try:
@@ -15,11 +18,11 @@ def import_or_install(package):
         print("Certains modules ne sont pas installés, installation ...")
         try:
             subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
-            #pip.main(['install', package])
+            pip.main(['install', package])
         except:
             try:
                 subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
-                #pip.main(['install', package])
+                pip.main(['install', package])
             except:
                 print("Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
                 print(dependencies)
@@ -27,11 +30,11 @@ def import_or_install(package):
         print("Certains modules ne sont pas installés, installation ...")
         try:
             subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
-            #pip.main(['install', package])
+            pip.main(['install', package])
         except:
             try:
                 subprocess.check_call(["python3", '-m', 'pip', 'install', package]) # install pkg
-                #pip.main(['install', package])
+                pip.main(['install', package])
             except:
                 print("Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
                 print(dependencies)
@@ -49,6 +52,11 @@ from threading import Thread
 import xml.etree.ElementTree as ET
 from lxml import etree
 import ntpath
+import shutil
+import Augmentor
+import torchvision
+import matplotlib.pyplot as plt
+#%matplotlib inline
 
 from keras.layers import Dense, GlobalAveragePooling2D
 from keras.models import Model
@@ -63,8 +71,8 @@ import os
 RMSPROP_LR_DEFAULT = 0.001
 ADAM_LR_DEFAULT = 0.001
 BATCH_SIZE_DEFAULT = 16
-IM_WIDTH, IM_HEIGHT = 256, 256 # fixed size for InceptionV3
-NB_IV3_LAYERS_TO_FREEZE = 172 # nb de couches d'inception V3 à laisser statique
+IM_WIDTH, IM_HEIGHT = 299, 299 # fixed size for InceptionV3
+NB_IV3_LAYERS_TO_FREEZE = 1 # nb de couches d'inception V3 à laisser statique
 
 user_input = ''
 
@@ -118,11 +126,42 @@ class Logger(object):
         pass    
 
 
+class thread_with_trace(threading.Thread): 
+  def __init__(self, *args, **keywords): 
+    threading.Thread.__init__(self, *args, **keywords) 
+    self.killed = False
+  
+  def start(self): 
+    self.__run_backup = self.run 
+    self.run = self.__run       
+    threading.Thread.start(self) 
+  
+  def __run(self): 
+    sys.settrace(self.globaltrace) 
+    self.__run_backup() 
+    self.run = self.__run_backup 
+  
+  def globaltrace(self, frame, event, arg): 
+    if event == 'call': 
+      return self.localtrace 
+    else: 
+      return None
+  
+  def localtrace(self, frame, event, arg): 
+    if self.killed: 
+      if event == 'line': 
+        raise SystemExit() 
+    return self.localtrace 
+  
+  def kill(self): 
+    self.killed = True
+
+# Idée de fonction du logiciel pour augmenter un dossier d'exemples
 def run_dataset_configuration(data_dir, nb_images_augmentation, liste_options_augmentation):
-	pass
+    pass
 
 
-def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement):
+def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, reprise_poids, finetuning_partiel, dir_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement):
     bouton_lancer_entrainement.config(state=DISABLED)
     print("\n")
     print(os.getcwd())
@@ -137,6 +176,9 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     from keras.applications.inception_v3 import InceptionV3, preprocess_input
     from keras.applications.inception_resnet_v2 import InceptionResNetV2
     from keras.applications.resnet50 import ResNet50
+    from keras.applications.nasnet import NASNetMobile
+    #from keras.applications.mobilenet_v2 import NASNetMobile
+    
     from keras.models import Model
     from keras.layers import Dense, GlobalAveragePooling2D
     from keras.preprocessing.image import ImageDataGenerator
@@ -246,18 +288,104 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     
     
     print("\nLancement de l'entrainement ...\n")
+
+    """
+    p_train = Augmentor.Pipeline()
+
+    p_train.rotate(probability=0.7, max_left_rotation=10, max_right_rotation=10)
+    p_train.flip_top_bottom(0.5)
+    p_train.random_distortion(probability=1, grid_width=4, grid_height=4, magnitude=16)
+    p_train.flip_left_right(probability=0.5)
+    p_train.flip_top_bottom(probability=0.5)
+    p_train.crop_random(probability=0.05, percentage_area=0.5)
+    p_train.rotate90(probability=0.1)
+    p_train.rotate270(probability=0.1)
+    p_train.random_contrast(probability=0.1, min_factor=0.5, max_factor =1.5)
+    p_train.random_brightness(probability=0.1, min_factor=0.5, max_factor =1.5)
+    p_train.gaussian_distortion(probability=0.1, grid_width=16, grid_height=16, magnitude=2, corner="bell", method="in", mex=1.1,
+                              mey=1.1, sdx=1.1, sdy=1.1)
+    p_train.random_erasing(probability=0.05, rectangle_area=0.5)
+    p_train.skew(probability=0.1, magnitude=0.2)
+    p_train.greyscale(probability=0.01)
+    p_train.histogram_equalisation(probability=0.1)
+    """
+    """
+    if(os.path.exists(dir_train + "/output/")):
+        shutil.rmtree(dir_train + "/output/")
+    """
     
+    #p_train.status()
+
+    #g_train = p_train.keras_generator(batch_size = batch_size, image_data_format='channels_first')
+    """g_train = p_train.keras_generator(batch_size = batch_size)"""
+    """
+    images, labels = next(g_train)
+    print(labels[0])
+    plt.imshow(images[0].reshape(28, 28), cmap="Greys");
+    """
+    """
+
+
+    train_datagen =  ImageDataGenerator(p_train.keras_preprocess_func())
+    train_generator = train_datagen.flow_from_directory(
+        dir_train,
+        target_size=(IM_WIDTH, IM_HEIGHT),
+        batch_size=batch_size
+    )
+
+
+    
+    p_validation = Augmentor.Pipeline()
+
+    p_validation.rotate(probability=0.7, max_left_rotation=10, max_right_rotation=10)
+    p_validation.flip_top_bottom(0.5)
+    p_validation.random_distortion(probability=1, grid_width=4, grid_height=4, magnitude=16)
+    p_validation.flip_left_right(probability=0.5)
+    p_validation.flip_top_bottom(probability=0.5)
+    p_validation.crop_random(probability=0.05, percentage_area=0.5)
+    p_validation.rotate90(probability=0.1)
+    p_validation.rotate270(probability=0.1)
+    p_validation.random_contrast(probability=0.1, min_factor=0.5, max_factor =1.5)
+    p_validation.random_brightness(probability=0.1, min_factor=0.5, max_factor =1.5)
+    p_validation.gaussian_distortion(probability=0.1, grid_width=16, grid_height=16, magnitude=2, corner="bell", method="in", mex=1.1,
+                              mey=1.1, sdx=1.1, sdy=1.1)
+    p_validation.random_erasing(probability=0.05, rectangle_area=0.5)
+    p_validation.skew(probability=0.1, magnitude=0.2)
+    p_validation.greyscale(probability=0.01)
+    p_validation.histogram_equalisation(probability=0.1)
+    """
+    
+
+    """
+    if(os.path.exists(dir_validation + "/output/")):
+        shutil.rmtree(dir_validation + "/output/")
+    """
+
+    """
+    #p_validation.status()
+
+    
+    #g_validation = p_validation.keras_generator(batch_size = batch_size, image_data_format='channels_first')
+    g_validation = p_validation.keras_generator(batch_size = batch_size)
+
+   
+    test_datagen =  ImageDataGenerator(p_validation.keras_preprocess_func())
+    validation_generator = test_datagen.flow_from_directory(
+        dir_validation,
+        target_size=(IM_WIDTH, IM_HEIGHT),
+        batch_size=batch_size
+    )
+    """
+
+    if(type_modele == "nasnetmobile"):
+        IM_WIDTH, IM_HEIGHT = 224, 224
+    else:
+        IM_WIDTH, IM_HEIGHT = 299, 299 # fixed size for InceptionV3
+
+
+   
     # data prep
     train_datagen =  ImageDataGenerator(
-        preprocessing_function=preprocess_input,
-        rotation_range=30,
-        width_shift_range=0.2,
-        height_shift_range=0.2,
-        shear_range=0.2,
-        zoom_range=0.2,
-        horizontal_flip=True
-    )
-    test_datagen = ImageDataGenerator(
         preprocessing_function=preprocess_input,
         rotation_range=30,
         width_shift_range=0.2,
@@ -272,6 +400,17 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
         target_size=(IM_WIDTH, IM_HEIGHT),
         batch_size=batch_size,
     )
+   
+
+    test_datagen = ImageDataGenerator(
+        preprocessing_function=preprocess_input,
+        rotation_range=30,
+        width_shift_range=0.2,
+        height_shift_range=0.2,
+        shear_range=0.2,
+        zoom_range=0.2,
+        horizontal_flip=True
+    )
     
     validation_generator = test_datagen.flow_from_directory(
         dir_validation,
@@ -279,17 +418,59 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
         batch_size=batch_size,
     )
     
-    # setup model
-    if(type_modele == "resnet"):
-        base_model = ResNet50(weights='imagenet', include_top=False)
-    elif(type_modele == "inceptionresnetv2"):
-    	base_model = InceptionResNetV2(weights='imagenet', include_top=False)
-    else:
-        base_model = InceptionV3(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
-    model = add_new_last_layer(base_model, nb_classes)
+    
     
     if reprise:
-        model.load_weights(dir_modele)
+        if reprise_poids:
+            # setup model
+            if(type_modele == "resnet"):
+                base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(299, 299, 3))
+            elif(type_modele == "inceptionresnetv2"):
+                base_model = InceptionResNetV2(weights='imagenet', include_top=False, input_shape=(299, 299, 3))
+            elif(type_modele == "nasnetmobile"):
+                base_model = NASNetMobile(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+            else:
+                base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299, 299, 3)) #include_top=False excludes final FC layer
+            model = add_new_last_layer(base_model, nb_classes)
+            model.load_weights(dir_modele)
+        else:
+            from keras.models import load_model
+            print("\nchargement du modele ...")
+            model = load_model(dir_modele)
+            print("chargement du modele terminé\n")
+            if finetuning_partiel:
+                from keras.layers.convolutional import Convolution2D, MaxPooling2D
+                from keras.layers.core import Dropout, Activation
+
+                model.input
+
+                #model.summary(line_length=150)
+                model.layers.pop()
+                model.layers.pop()
+                model.layers.pop()
+                #model.summary(line_length=150)
+                
+                # add a global spatial average pooling layer
+                x = model.layers[-1].output
+                x = GlobalAveragePooling2D()(x)
+                # let's add a fully-connected layer
+                x = Dense(1024, activation='relu')(x)
+                # and a logistic layer -- let's say we have 200 classes
+                predictions = Dense(nb_classes, activation='softmax')(x)
+                
+                model = Model(input=model.input, output=predictions)
+
+    else:
+        # setup model
+        if(type_modele == "resnet"):
+            base_model = ResNet50(weights='imagenet', include_top=False, input_shape=(299, 299, 3))
+        elif(type_modele == "inceptionresnetv2"):
+            base_model = InceptionResNetV2(weights='imagenet', include_top=False, input_shape=(299, 299, 3))
+        elif(type_modele == "nasnetmobile"):
+                base_model = NASNetMobile(weights='imagenet', include_top=False, input_shape=(224, 224, 3))
+        else:
+            base_model = InceptionV3(weights='imagenet', include_top=False, input_shape=(299, 299, 3)) #include_top=False excludes final FC layer
+        model = add_new_last_layer(base_model, nb_classes)
 
     tensorboard = TensorBoard(log_dir = "./logs", histogram_freq=0, write_graph=True, write_images=False)
     
@@ -315,7 +496,7 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
     
     
     # fine-tuning
-    setup_to_finetune(model, pas_entrainement, optimiseur_entrainement)
+    setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze)
     
     print("\n\n--- --- Lancement de l'entrainement --- ---\n")
     """
@@ -336,12 +517,13 @@ def run_training(bouton_lancer_entrainement, reprise, dir_modele, nb_classes, di
         epochs=nb_epoch_entrainement,                            # nb de cycles d'entrainement
         workers=1,                                              # nb d'user travaillant dessus (laisser 1 si GPU)
         use_multiprocessing=False,                              # laisser False si GPU
-        steps_per_epoch=dir_train_nb_fic // batch_size,         # nb fic entrainement / taille tampon
+        #steps_per_epoch=dir_train_nb_fic // batch_size,         # nb fic entrainement / taille tampon
         validation_steps=dir_validation_nb_fic // batch_size,   # nb fic validation / taille tampon
         validation_data=validation_generator,                   # generateur de nouvelles image de validation
         #nb_val_samples=dir_validation_nb_fic,                  # nb fichiers de validation (laisser en com)
         class_weight="auto",
-        callbacks = [tensorboard]
+        callbacks = [tensorboard],
+        shuffle=True
         #verbose=2
     )
     
@@ -458,16 +640,16 @@ def add_new_last_layer(base_model, nb_classes):
     return model
 
 
-def setup_to_finetune(model, pas_entrainement, optimiseur_entrainement):
+def setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze):
     from keras.optimizers import Adam, RMSprop, SGD
     """Freeze the bottom NB_IV3_LAYERS and retrain the remaining top layers.
     note: NB_IV3_LAYERS corresponds to the top 2 inception blocks in the inceptionv3 arch
     Args:
     model: keras model
     """
-    for layer in model.layers[:NB_IV3_LAYERS_TO_FREEZE]:
+    for layer in model.layers[:nb_layers_to_freeze]:
         layer.trainable = False
-    for layer in model.layers[NB_IV3_LAYERS_TO_FREEZE:]:
+    for layer in model.layers[nb_layers_to_freeze:]:
         layer.trainable = True
     if(optimiseur_entrainement == "RMSprop"):
         optimiseur = RMSprop(lr=pas_entrainement, rho=0.9, epsilon=None, decay=0.0)
@@ -582,6 +764,9 @@ class Interface(Frame):
         self.nb_classes = 0
         self.nb_classes_train = 0
         self.nb_classes_validation = 0
+
+        self.thread_entrainement = None
+
         temp = path
         if(os.path.isfile(temp)):
                 self.pythonpath = temp
@@ -604,7 +789,7 @@ class Interface(Frame):
         ### --- Sortie du script --- ###
 
         self.text = Text(self.f1)
-        self.text.config(font=("Source Code Pro", 8))
+        self.text.config(font=("Courrier New", 8))
         self.text.pack(fill=Y, side=RIGHT)
 
 
@@ -628,6 +813,22 @@ class Interface(Frame):
         self.bouton_choose_model = Button(self.continuer_entraienment, text="Choisir un modèle", command=self.choose_model, state=DISABLED)
         self.bouton_choose_model.grid(row=1, column=1)
 
+        self.only_weights = IntVar()
+        self.case_only_weights = Checkbutton(self.continuer_entraienment,
+                                               text="Ne contient que les poids",
+                                               variable=self.only_weights,
+                                               command=self.ne_contient_que_les_poids)
+        self.case_only_weights.grid(row=2, columnspan=2)
+        self.case_only_weights.config(state=DISABLED)
+
+        self.valeur_finetuning_partiel = IntVar()
+        self.case_finetuning_partiel = Checkbutton(self.continuer_entraienment,
+                                               text="Faire un fine tuning partiel",
+                                               variable=self.valeur_finetuning_partiel,
+                                               command=self.faire_finetuning_partiel)
+        self.case_finetuning_partiel.grid(row=3, columnspan=2)
+        self.case_finetuning_partiel.config(state=DISABLED)
+
 
         ### --- Base --- ###
 
@@ -642,7 +843,7 @@ class Interface(Frame):
         self.menu_deroulant_modeles = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_modeles)
         self.menu_deroulant_modeles.grid(row=0, column=1)
         self.menu_deroulant_modeles.bind('>', self.on_value_change)
-        self.liste_modeles = ["Inception V3",  "Inception-ResNet V2", "ResNet"]
+        self.liste_modeles = ["Inception V3",  "Inception-ResNet V2", "ResNet", "NASNetMobile"]
         self.menu_deroulant_modeles['values'] =  self.liste_modeles
 
 
@@ -665,6 +866,18 @@ class Interface(Frame):
         self.menu_deroulant_modeles = OptionMenu(self.types_modele, self.texte_liste_types_modeles, *self.liste_types_modeles)
         self.menu_deroulant_modeles.pack(side="right")
         """
+
+        self.label_layers_to_freeze = Label(self.base, text="Nb layers to freeze: ")
+        self.label_layers_to_freeze.grid(row=2)
+
+        self.menu_deroulant_valeur_layers_to_freeze = StringVar(value='249')
+        self.menu_deroulant_layers_to_freeze = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_layers_to_freeze)
+        self.menu_deroulant_layers_to_freeze.grid(row=2, column=1)
+        self.menu_deroulant_layers_to_freeze.bind('>', self.on_value_change)
+        self.liste_layers_to_freeze = ["10", "50", "100", "150", "249"]
+        self.menu_deroulant_layers_to_freeze['values'] =  self.liste_layers_to_freeze
+
+        
 
 
         ### --- Pre-entrainement --- ###
@@ -786,14 +999,14 @@ class Interface(Frame):
         self.dataset = LabelFrame(self.f1, text="Dataset")
         self.dataset.pack(fill=X, side=TOP, expand="yes", padx=self.padding, pady=self.padding)
 
-        self.label_dataset_train = Label(self.dataset, text="0 photo")
+        self.label_dataset_train = Label(self.dataset, text="0 photo, 0 classe")
         self.label_dataset_train.grid(row=1)
 
         self.bouton_choose_dataset_train = Button(self.dataset, text="Dossier d'entrainement", command=self.choose_dataset_train)
         self.bouton_choose_dataset_train.grid(row=1, column=1)
 
 
-        self.label_dataset_validation = Label(self.dataset, text="0 photo")
+        self.label_dataset_validation = Label(self.dataset, text="0 photo, 0 classe")
         self.label_dataset_validation.grid(row=2)
 
         self.bouton_choose_dataset_validation = Button(self.dataset, text="Dossier de validation", command=self.choose_dataset_validation)
@@ -805,8 +1018,11 @@ class Interface(Frame):
         self.cadre_lancer_entrainement = Frame(self.f1, borderwidth=20, relief=FLAT)
         self.cadre_lancer_entrainement.pack(fill=X, side=TOP, expand="yes", padx=self.padding, pady=self.padding)
 
-        self.bouton_lancer_entrainement = Button(self.cadre_lancer_entrainement, text="Lancer l'entrainement !", command=self.verification_et_lancement)
-        self.bouton_lancer_entrainement.pack(side="bottom")
+        self.bouton_lancer_entrainement = Button(self.cadre_lancer_entrainement, text="Lancer l'entrainement !", fg="green",command=self.verification_et_lancement)
+        self.bouton_lancer_entrainement.pack(side="left")
+
+        self.bouton_stopper_entrainement = Button(self.cadre_lancer_entrainement, text="Stopper l'entrainement", fg="red", command=self.stopper_entrainement)
+        self.bouton_stopper_entrainement.pack(side="right")
 
         """
         import tkinter.font
@@ -937,6 +1153,9 @@ class Interface(Frame):
         pas_entrainement = 0
         optimiseur_entrainement = ""
         batch_size = 0
+        reprise_poids = True
+        finetuning_partiel = False
+        nb_layers_to_freeze = 249
         
         erronne = False
         erreurs = []
@@ -971,13 +1190,15 @@ class Interface(Frame):
                 reprise = True
                 path_modele = self.modelpath
 
-            if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet", "Inception-ResNet V2"]:
+            if self.menu_deroulant_valeur_modeles.get() in ["Inception V3", "ResNet", "Inception-ResNet V2", "NASNetMobile"]:
                 if(self.menu_deroulant_valeur_modeles.get() == "Inception V3"):
                     type_modele = "inceptionv3"
                 elif(self.menu_deroulant_valeur_modeles.get() == "ResNet"):
                     type_modele = "resnet"
                 elif(self.menu_deroulant_valeur_modeles.get() == "Inception-ResNet V2"):
-                	type_modele = "inceptionresnetv2"
+                    type_modele = "inceptionresnetv2"
+                elif(self.menu_deroulant_valeur_modeles.get() == "NASNetMobile"):
+                    type_modele = "nasnetmobile"
             else:
                 erronne = True
                 erreurs.append("Le modele demandé n'est pas supporté, veuillez entrer un modele parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
@@ -1016,8 +1237,22 @@ class Interface(Frame):
             else:
                 erronne = True
                 erreurs.append("L'optimiseur demandé n'est pas supporté, veuillez entrer un optimiseur parmis ceux proposés (il est possible que vous ayez fait une erreur de frappe)")
+            
+            if int(self.menu_deroulant_valeur_layers_to_freeze.get()) >= 0:
+                nb_layers_to_freeze = int(self.menu_deroulant_valeur_layers_to_freeze.get())
+            else:
+                erronne = True
+                erreurs.append("La valeur du nombre de couches à rendre non-entrainables est erroné")
 
+            if self.only_weights.get() == 1:
+                reprise_poids = True
+            else:
+                reprise_poids = False
 
+            if self.valeur_finetuning_partiel.get() == 1:
+                finetuning_partiel = True
+            else:
+                finetuning_partiel = False
 
 
             if erreurs:
@@ -1026,8 +1261,10 @@ class Interface(Frame):
                     texte += " - " + erreur + "\n"
                 showerror("Erreur", texte)
 
-        except:
+        except Exception as e:
             showerror("Erreur", "Erreur lors de l'enregistrement des parametres")
+            print(e)
+            traceback.print_stack()
 
         if not erronne:
             #run_training(reprise, path_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement)
@@ -1063,11 +1300,16 @@ class Interface(Frame):
             sys.stdout.set_training_bar(self.processing_bar)
             sys.stderr.set_training_bar(self.processing_bar)
 
-            t = Thread(target = lambda: run_training(self.bouton_lancer_entrainement, reprise, path_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement))
-            t.start()
+            self.thread_entrainement = thread_with_trace(target = lambda: run_training(self.bouton_lancer_entrainement, nb_layers_to_freeze, reprise, reprise_poids, finetuning_partiel, path_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement))
+            self.thread_entrainement.start()
 
 
+    def stopper_entrainement(self):
+        self.thread_entrainement.kill()
+        self.thread_entrainement.join()
 
+        if not self.thread_entrainement.isAlive():
+            print("=== === Entrainement stoppé === ===")
 
 
 
@@ -1082,7 +1324,7 @@ class Interface(Frame):
             if(dir_train_nb_fic > 0):
                 self.trainpath = temp
                 self.nb_classes_train = int(len(next(os.walk(temp))[1]))
-                self.label_dataset_train["text"] = str(dir_train_nb_fic) + " photos"
+                self.label_dataset_train["text"] = str(dir_train_nb_fic) + " photos, " + str(self.nb_classes_train) + " classes"
             else:
                 showerror("Aucune photo trouvée", "le dossier d'entrainement que vous avez donné semble contenir des classes mais ne contient aucune photo !")
         elif(int(len(next(os.walk(temp))[1])) == 0):
@@ -1102,7 +1344,7 @@ class Interface(Frame):
             if(dir_validation_nb_fic > 0):
                 self.validationpath = temp
                 self.nb_classes_validation = int(len(next(os.walk(temp))[1]))
-                self.label_dataset_validation["text"] = str(dir_validation_nb_fic) + " photos"
+                self.label_dataset_validation["text"] = str(dir_validation_nb_fic) + " photos, " + str(self.nb_classes_validation) + " classes"
             else:
                 showerror("Aucune photo trouvée", "le dossier de validation que vous avez donné semble contenir des classes mais ne contient aucune photo !")
         elif(int(len(next(os.walk(temp))[1])) == 0):
@@ -1124,9 +1366,24 @@ class Interface(Frame):
     def griser_bouton_continuer(self):
         if(self.continue_train.get() == 1):
             self.bouton_choose_model.config(state=NORMAL)
+            self.case_only_weights.config(state=NORMAL)
+            self.case_finetuning_partiel.config(state=NORMAL)
+            if self.only_weights.get() == 1 :
+                self.menu_deroulant_modeles.config(state=NORMAL)
+            else:
+                self.menu_deroulant_modeles.config(state=DISABLED)
         else:
             self.bouton_choose_model.config(state=DISABLED)
-
+            self.case_only_weights.config(state=DISABLED)
+            self.case_finetuning_partiel.config(state=DISABLED)
+            self.menu_deroulant_modeles.config(state=NORMAL)
+    def ne_contient_que_les_poids(self):
+        if(self.only_weights.get() == 1):
+            self.menu_deroulant_modeles.config(state=NORMAL)
+        else:
+            self.menu_deroulant_modeles.config(state=DISABLED)
+    def faire_finetuning_partiel(self):
+        pass
     def change_pyhton_path(self):
         temp = askopenfilename(title="Indiquer l'interpreteur python à utiliser",filetypes=[('python','.*'),('all files','.*')])
         if(os.path.isfile(temp)):
@@ -1144,7 +1401,7 @@ class Interface(Frame):
 
     def choose_model(self):
         temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('h5 files','.h5'),('all files','.*')])
-        if(os.path.isfile(temp) and os.path.splitext(temp)[1] == ".h5"):
+        if(os.path.isfile(temp) and (os.path.splitext(temp)[1] == ".h5" or os.path.splitext(temp)[1] == ".tflite")):
             self.modelpath = temp
             self.label_modele_repris["text"] = ntpath.basename(temp)
         else:
@@ -1156,8 +1413,11 @@ class Interface(Frame):
             self.trainedmodelpath = temp
             self.label_test_model["text"] = ntpath.basename(temp)
             if self.cnn_a_tester is None:
-                self.cnn_a_tester = CNN_a_tester()
-            self.cnn_a_tester.path_to_model_weights = temp
+                #showerror("Probleme", "Le CNN n'a pas été chargé jusque là")
+                self.cnn_a_tester = CNN_a_tester(temp)
+            else:
+                self.cnn_a_tester.actualiser(temp)
+            #self.cnn_a_tester.path_to_model_weights = temp
         else:
             showerror("Fichier invalide", "Le fichier que vous indiquez n'est pas valide !")
 
@@ -1168,17 +1428,18 @@ class Interface(Frame):
         self.nb_classes = len(self.liste_classes)
         self.label_nb_classes_test["text"] = str(self.nb_classes) + " classes trouvées"
         if self.cnn_a_tester is None:
-            self.cnn_a_tester = CNN_a_tester()
-        self.cnn_a_tester.nb_classes = self.nb_classes
+            self.cnn_a_tester = CNN_a_tester(self.trainedmodelpath)
+        #self.cnn_a_tester.nb_classes = self.nb_classes
         self.cnn_a_tester.categories = self.liste_classes
-        self.cnn_a_tester.actualiser()
+        #self.cnn_a_tester.actualiser()
         #print(self.liste_classes)
 
     def choose_test_image(self):
         temp = askopenfilename(title="Choisir un modèle de réseau de neurones convolutionnel",filetypes=[('all files','.*'),('péaingé','.png'),('jipégé','.jpg'),('jife','.gif')])
         if(os.path.isfile(temp)):
             if self.cnn_a_tester is None:
-                self.cnn_a_tester = CNN_a_tester()
+                showerror("Probleme", "Le CNN n'a pas été chargé jusque là")
+                self.cnn_a_tester = CNN_a_tester(self.trainedmodelpath)
             reponse, suretee, img = self.cnn_a_tester.predict(temp)
             self.label_test_image["text"] = "Image : " + temp
             self.label_test_reponse["text"] = reponse
@@ -1194,7 +1455,7 @@ class Interface(Frame):
 
 class CNN_a_tester():
 
-    def __init__(self):
+    def __init__(self, path_to_model):
         import tensorflow as tf
         import glob
         from keras import __version__
@@ -1203,6 +1464,7 @@ class CNN_a_tester():
         from keras.applications.resnet50 import ResNet50
         from keras.preprocessing.image import ImageDataGenerator
         from keras.optimizers import SGD
+        from keras.models import load_model
 
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
@@ -1211,17 +1473,12 @@ class CNN_a_tester():
         self.target_size = (299, 299)
         self.categories = []
         self.nb_classes = 0
-        self.path_to_model_weights = ""
+        self.path_to_model_weights = path_to_model
 
-        self.base_model = InceptionResNetV2(weights='imagenet', include_top=False) #include_top=False excludes final FC layer
-        
-    def actualiser(self):
-        self.x = self.base_model.output
-        self.x = GlobalAveragePooling2D()(self.x)
-        self.x = Dense(self.nb_classes, activation='relu')(self.x) #new FC layer, random init
-        self.predictions = Dense(self.nb_classes, activation='softmax')(self.x) #new softmax layer
-        self.model = Model(input=self.base_model.input, output=self.predictions)
-        self.model.load_weights(self.path_to_model_weights)
+        self.model = load_model(self.path_to_model_weights)
+ 
+    def actualiser(self, path_to_model):
+        self.model = load_model(path_to_model)
         
 
     def predict(self, path):
@@ -1234,6 +1491,8 @@ class CNN_a_tester():
         preds = self.model.predict(x)
         preds_et_probas = {}
         #print(preds[0])
+        print(preds[0])
+
         for categorie, proba in zip(self.categories, preds[0]):
             #print(categorie + " : " + str(proba))
             preds_et_probas[categorie] = proba
