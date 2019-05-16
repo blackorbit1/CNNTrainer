@@ -109,14 +109,17 @@ class Logger(object):
         if self.train_progress is not None:
             if "Lancement de l'entrainement ..." in message:
                 self.train_progress["value"] = 5
-            if "Epoch " in message:
-                avancement = message[6:]
-                #print(avancement)
-                actuel, final = avancement.split("/")
-                #print("actuel : " + actuel + " / final : " + final)
-                final_amount = int(actuel) * 100 / int(final)
-                #print(int(final_amount))
-                self.train_progress["value"] = final_amount
+            try:
+                if "Epoch " in message:
+                    avancement = message[6:]
+                    #print(avancement)
+                    actuel, final = avancement.split("/")
+                    #print("actuel : " + actuel + " / final : " + final)
+                    final_amount = int(actuel) * 100 / int(final)
+                    #print(int(final_amount))
+                    self.train_progress["value"] = final_amount
+            except ValueError:
+                pass
     def set_training_bar(self, training_bar):
         self.train_progress = training_bar
     def flush(self):
@@ -161,7 +164,7 @@ def run_dataset_configuration(data_dir, nb_images_augmentation, liste_options_au
     pass
 
 
-def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, reprise_poids, finetuning_partiel, dir_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement):
+def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to_f, reprise, reprise_poids, finetuning_partiel, dir_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement):
     bouton_lancer_entrainement.config(state=DISABLED)
     print("\n")
     print(os.getcwd())
@@ -187,6 +190,8 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, repri
     from tensorflow.python.client import device_lib
     import tensorflow as tf
     from keras.backend.tensorflow_backend import set_session
+
+    from keras.callbacks import EarlyStopping, ModelCheckpoint, ReduceLROnPlateau
     
 
     
@@ -380,19 +385,22 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, repri
     if(type_modele == "nasnetmobile"):
         IM_WIDTH, IM_HEIGHT = 224, 224
     else:
-        IM_WIDTH, IM_HEIGHT = 299, 299 # fixed size for InceptionV3
+        IM_WIDTH, IM_HEIGHT = 224, 224 # fixed size for InceptionV3
 
 
    
     # data prep
     train_datagen =  ImageDataGenerator(
         preprocessing_function=preprocess_input,
-        rotation_range=30,
-        width_shift_range=0.2,
-        height_shift_range=0.2,
-        shear_range=0.2,
-        zoom_range=0.2,
-        horizontal_flip=True
+        rotation_range=180,
+        width_shift_range=0.4,
+        height_shift_range=0.4,
+        shear_range=0.3,
+        zoom_range=0.5,
+        horizontal_flip=True,
+        vertical_flip=True,
+        channel_shift_range=30,
+        brightness_range=[0.2, 1.0]
     )
     
     train_generator = train_datagen.flow_from_directory(
@@ -446,17 +454,17 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, repri
 
                 #model.summary(line_length=150)
                 model.layers.pop()
-                model.layers.pop()
-                model.layers.pop()
+                #model.layers.pop()
+                #model.layers.pop()
                 #model.summary(line_length=150)
                 
                 # add a global spatial average pooling layer
                 x = model.layers[-1].output
-                x = GlobalAveragePooling2D()(x)
+                #x = GlobalAveragePooling2D()(x)
                 # let's add a fully-connected layer
-                x = Dense(1024, activation='relu')(x)
+                #x = Dense(1024, activation='relu')(x)
                 # and a logistic layer -- let's say we have 200 classes
-                predictions = Dense(nb_classes, activation='softmax')(x)
+                predictions = Dense(nb_classes, activation='softmax', name="dense_final_1")(x)
                 
                 model = Model(input=model.input, output=predictions)
 
@@ -496,7 +504,12 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, repri
     
     
     # fine-tuning
-    setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze)
+    setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze, change_nb_l_to_f)
+
+    filepath= dir_modele + "-wi-{epoch:02d}-{val_acc:.2f}.hdf5"
+    checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True,mode='max')
+    callbacks_list = [checkpoint, checkpoint, tensorboard]
+
     
     print("\n\n--- --- Lancement de l'entrainement --- ---\n")
     """
@@ -522,7 +535,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, reprise, repri
         validation_data=validation_generator,                   # generateur de nouvelles image de validation
         #nb_val_samples=dir_validation_nb_fic,                  # nb fichiers de validation (laisser en com)
         class_weight="auto",
-        callbacks = [tensorboard],
+        callbacks = callbacks_list,
         shuffle=True
         #verbose=2
     )
@@ -640,17 +653,20 @@ def add_new_last_layer(base_model, nb_classes):
     return model
 
 
-def setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze):
+def setup_to_finetune(model, pas_entrainement, optimiseur_entrainement, nb_layers_to_freeze = 1, change_nb_l_to_f = True):
     from keras.optimizers import Adam, RMSprop, SGD
     """Freeze the bottom NB_IV3_LAYERS and retrain the remaining top layers.
     note: NB_IV3_LAYERS corresponds to the top 2 inception blocks in the inceptionv3 arch
     Args:
     model: keras model
     """
-    for layer in model.layers[:nb_layers_to_freeze]:
-        layer.trainable = False
-    for layer in model.layers[nb_layers_to_freeze:]:
-        layer.trainable = True
+
+    if change_nb_l_to_f:
+        for layer in model.layers[:nb_layers_to_freeze]:
+            layer.trainable = False
+        for layer in model.layers[nb_layers_to_freeze:]:
+            layer.trainable = True
+    
     if(optimiseur_entrainement == "RMSprop"):
         optimiseur = RMSprop(lr=pas_entrainement, rho=0.9, epsilon=None, decay=0.0)
         model.compile(optimizer=optimiseur, loss='categorical_crossentropy', metrics=['accuracy'])
@@ -867,12 +883,21 @@ class Interface(Frame):
         self.menu_deroulant_modeles.pack(side="right")
         """
 
-        self.label_layers_to_freeze = Label(self.base, text="Nb layers to freeze: ")
-        self.label_layers_to_freeze.grid(row=2)
+        self.valeur_changer_nb_l_to_f = IntVar()
+        self.case_changer_nb_l_to_f = Checkbutton(self.base,
+                                               text="Changer nb layers to freeze",
+                                               variable=self.valeur_changer_nb_l_to_f,
+                                               command=self.faire_changer_nb_l_to_f)
+        self.case_changer_nb_l_to_f.grid(row=2, columnspan=2)
+        self.case_changer_nb_l_to_f.select()
 
-        self.menu_deroulant_valeur_layers_to_freeze = StringVar(value='249')
+
+        self.label_layers_to_freeze = Label(self.base, text="Nb layers to freeze: ")
+        self.label_layers_to_freeze.grid(row=3)
+
+        self.menu_deroulant_valeur_layers_to_freeze = StringVar(value='200')
         self.menu_deroulant_layers_to_freeze = tkk.Combobox(self.base, textvariable=self.menu_deroulant_valeur_layers_to_freeze)
-        self.menu_deroulant_layers_to_freeze.grid(row=2, column=1)
+        self.menu_deroulant_layers_to_freeze.grid(row=3, column=1)
         self.menu_deroulant_layers_to_freeze.bind('>', self.on_value_change)
         self.liste_layers_to_freeze = ["10", "50", "100", "150", "249"]
         self.menu_deroulant_layers_to_freeze['values'] =  self.liste_layers_to_freeze
@@ -1156,7 +1181,8 @@ class Interface(Frame):
         reprise_poids = True
         finetuning_partiel = False
         nb_layers_to_freeze = 249
-        
+        change_nb_l_to_f = True
+
         erronne = False
         erreurs = []
 
@@ -1254,6 +1280,10 @@ class Interface(Frame):
             else:
                 finetuning_partiel = False
 
+            if self.valeur_changer_nb_l_to_f.get() == 1:
+                change_nb_l_to_f = True
+            else:
+                change_nb_l_to_f = False
 
             if erreurs:
                 texte = ""
@@ -1300,7 +1330,7 @@ class Interface(Frame):
             sys.stdout.set_training_bar(self.processing_bar)
             sys.stderr.set_training_bar(self.processing_bar)
 
-            self.thread_entrainement = thread_with_trace(target = lambda: run_training(self.bouton_lancer_entrainement, nb_layers_to_freeze, reprise, reprise_poids, finetuning_partiel, path_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement))
+            self.thread_entrainement = thread_with_trace(target = lambda: run_training(self.bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to_f, reprise, reprise_poids, finetuning_partiel, path_modele, nb_classes, dir_train, dir_train_nb_fic, dir_validation, dir_validation_nb_fic, preentrainement, nb_epoch_preentrainement, pas_preentrainement, nb_epoch_entrainement, pas_entrainement, batch_size, type_modele, optimiseur_preentrainement, optimiseur_entrainement))
             self.thread_entrainement.start()
 
 
@@ -1414,9 +1444,11 @@ class Interface(Frame):
             self.label_test_model["text"] = ntpath.basename(temp)
             if self.cnn_a_tester is None:
                 #showerror("Probleme", "Le CNN n'a pas été chargé jusque là")
-                self.cnn_a_tester = CNN_a_tester(temp)
+                self.cnn_a_tester = CNN_a_tester(self.trainedmodelpath)
+                if self.cnn_a_tester is None:
+                    showerror("Probleme", "Le CNN n'a pas pu etre chargé")
             else:
-                self.cnn_a_tester.actualiser(temp)
+                self.cnn_a_tester.actualiser(self.trainedmodelpath)
             #self.cnn_a_tester.path_to_model_weights = temp
         else:
             showerror("Fichier invalide", "Le fichier que vous indiquez n'est pas valide !")
@@ -1427,8 +1459,10 @@ class Interface(Frame):
         self.liste_classes.remove('')
         self.nb_classes = len(self.liste_classes)
         self.label_nb_classes_test["text"] = str(self.nb_classes) + " classes trouvées"
+        """
         if self.cnn_a_tester is None:
             self.cnn_a_tester = CNN_a_tester(self.trainedmodelpath)
+        """
         #self.cnn_a_tester.nb_classes = self.nb_classes
         self.cnn_a_tester.categories = self.liste_classes
         #self.cnn_a_tester.actualiser()
@@ -1452,6 +1486,12 @@ class Interface(Frame):
         else:
             showerror("Image invalide", "L'image que vous indiquez n'est pas valide !")
 
+    def faire_changer_nb_l_to_f(self):
+        if(self.valeur_changer_nb_l_to_f.get() == 1):
+            self.menu_deroulant_layers_to_freeze.config(state=NORMAL)
+        else:
+            self.menu_deroulant_layers_to_freeze.config(state=DISABLED)
+
 
 class CNN_a_tester():
 
@@ -1459,18 +1499,13 @@ class CNN_a_tester():
         import tensorflow as tf
         import glob
         from keras import __version__
-        from keras.applications.inception_v3 import InceptionV3
-        from keras.applications.inception_resnet_v2 import InceptionResNetV2
-        from keras.applications.resnet50 import ResNet50
-        from keras.preprocessing.image import ImageDataGenerator
-        from keras.optimizers import SGD
         from keras.models import load_model
 
         self.config = tf.ConfigProto()
         self.config.gpu_options.allow_growth = True
         self.session = tf.Session(config=self.config)
 
-        self.target_size = (299, 299)
+        self.target_size = (224, 224)
         self.categories = []
         self.nb_classes = 0
         self.path_to_model_weights = path_to_model
