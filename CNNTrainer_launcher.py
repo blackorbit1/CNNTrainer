@@ -9,7 +9,8 @@ import traceback
 import trace 
 import threading
 
-dependencies = ["xml", "lxml", "lxml.etree", "tkinter", "ntpath", "Augmentor", "torchvision"]
+
+dependencies = ["lxml", "ntpath", "matplotlib", "tensorflow", "keras", "numpy", "pillow"]
 
 def import_or_install(package):
     try:
@@ -39,9 +40,12 @@ def import_or_install(package):
                 print("Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
                 print(dependencies)
 
-
 for package in dependencies:
     import_or_install(package)
+
+
+
+
 
 from tkinter import *
 from tkinter.filedialog import *
@@ -49,12 +53,9 @@ from tkinter import ttk as tkk
 from tkinter.messagebox import showerror, showinfo
 import tkinter as tk
 from threading import Thread
-import xml.etree.ElementTree as ET
 from lxml import etree
 import ntpath
 import shutil
-import Augmentor
-import torchvision
 import matplotlib.pyplot as plt
 #%matplotlib inline
 
@@ -385,7 +386,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
     if(type_modele == "nasnetmobile"):
         IM_WIDTH, IM_HEIGHT = 224, 224
     else:
-        IM_WIDTH, IM_HEIGHT = 224, 224 # fixed size for InceptionV3
+        IM_WIDTH, IM_HEIGHT = 299, 299 # fixed size for InceptionV3
 
 
    
@@ -413,10 +414,10 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
     test_datagen = ImageDataGenerator(
         preprocessing_function=preprocess_input,
         rotation_range=30,
-        width_shift_range=0.2,
-        height_shift_range=0.2,
-        shear_range=0.2,
-        zoom_range=0.2,
+        width_shift_range=0.1,
+        height_shift_range=0.1,
+        shear_range=0.1,
+        zoom_range=0.1,
         horizontal_flip=True
     )
     
@@ -742,19 +743,6 @@ def leterminal(command, terminal, processing_bar, bouton_lancer_entrainement):
 
     sys.stdout = original
 
-
-def changer_xml(balise, attribut, valeur):
-    tree = ET.parse("CNNTrainer\\base_de_donnees.xml")
-    root = tree.getroot()
-    for variable in root.iter(balise):
-        variable.get(attribut)
-        variable.set(attribut, valeur)
-    tree.write("CNNTrainer\\base_de_donnees.xml")
-
-def voir_xml(balise, attribut):
-    tree = etree.parse("CNNTrainer\\base_de_donnees.xml")
-    for balise in tree.xpath("/data_base/" + balise):
-        return balise.get(attribut)
 
 
 pythonpath = ""
