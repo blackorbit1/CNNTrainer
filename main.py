@@ -63,11 +63,19 @@ def import_or_install_python_package(package):
     except (ImportError, ModuleNotFoundError):
         print("Le module " + package + " n'est pas installé, installation ...")
         try:
-            subprocess.check_call(["python3", '-m', 'pip', 'install', package])  # install pkg
+            python = get_python_command()
+            subprocess.check_call([python, '-m', 'pip', 'install', package])  # install pkg
         except:
             print(
                 "Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
             print(dependencies)
+
+def get_python_command():
+    try:
+        subprocess.check_call(["python3"])
+        return "python3"
+    except:
+        return "python"
 
 
 # installation des dépendances python
