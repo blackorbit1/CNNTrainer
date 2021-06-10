@@ -17,7 +17,8 @@ dependencies = [
     "traceback",
     "trace",
     "threading",
-    "yaml"
+    "yaml",
+    "scipy" # il n'y a pas d'import dans le code mais tensorflow en a besoin
 ]
 
 linux_packages = {

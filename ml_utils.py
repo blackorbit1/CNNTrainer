@@ -31,8 +31,8 @@ def get_model(model_name, width=224, height=224, nb_layers=3, pretraining_datase
 
 
 def add_new_last_layer(model, nb_classes):
-    from keras.models import Model
-    from keras.layers import Dense, GlobalAveragePooling2D
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import Dense, GlobalAveragePooling2D
 
     # ajout d'une couche qui va faire le lien entre l'ancienne sortie et la nouvelle sortie
     x = model.output
@@ -40,9 +40,9 @@ def add_new_last_layer(model, nb_classes):
     x = Dense(units=nb_classes, activation='relu')(x)
 
     # ajout d'une nouvelle couche de sorties
-    predictions = Dense(int(nb_classes), activation='softmax')(x)
+    predictions = Dense(nb_classes, activation='softmax')(x)
 
-    return Model(input=model.input, output=predictions)
+    return Model(inputs=model.input, outputs=predictions)
 
 def use_gpu():
     from tensorflow.python.client import device_lib

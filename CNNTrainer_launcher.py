@@ -160,7 +160,7 @@ def add_new_last_layer(base_model, nb_classes):
                         except:
                             print("erreur, le type de nb_classes est : " + type(nb_classes))
     #predictions = Dense(nb_classes, activation='softmax')(x) #new softmax layer
-    model = Model(input=base_model.input, output=predictions)
+    model = Model(inputs=base_model.input, outputs=predictions)
     return model
 
 

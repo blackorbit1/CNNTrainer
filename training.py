@@ -91,7 +91,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
                 x = model.layers[-1].output
 
                 predictions = Dense(nb_classes, activation='softmax', name="dense_final_1")(x)
-                model = Model(input=model.input, output=predictions)
+                model = Model(inputs=model.input, outputs=predictions)
     else:
         base_model = get_model(model_name=type_modele, width=IM_WIDTH, height=IM_HEIGHT, nb_layers=3)
         model = add_new_last_layer(base_model, nb_classes)
@@ -141,15 +141,15 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
 
     history_ft = model.fit_generator(
         train_generator,  # generateur de nouvelles image d'entrainement
-        samples_per_epoch=dir_train_nb_fic,  # nb de fichiers d'entrainement
+        #samples_per_epoch=dir_train_nb_fic,  # nb de fichiers d'entrainement
         epochs=nb_epoch_entrainement,  # nb de cycles d'entrainement
         workers=1,  # nb d'user travaillant dessus (laisser 1 si GPU)
-        use_multiprocessing=False,  # laisser False si GPU
+        use_multiprocessing=False,  # laisser False si GPU TODO : à retenir si mise en place d'une option CPU / GPU
         # steps_per_epoch=dir_train_nb_fic // batch_size,         # nb fic entrainement / taille tampon
         validation_steps=dir_validation_nb_fic // batch_size,  # nb fic validation / taille tampon
         validation_data=validation_generator,  # generateur de nouvelles image de validation
         # nb_val_samples=dir_validation_nb_fic,                  # nb fichiers de validation (laisser en com)
-        class_weight="auto",
+        #class_weight="auto",
         callbacks=callbacks_list,
         shuffle=True
         # verbose=2
