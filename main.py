@@ -52,6 +52,7 @@ def import_or_install_os_package(package, py_import):
 
             try:
                 subprocess.check_call(command.split(" "))
+                pass
             except:
                 # webbrowser doit etre importé à ce stade là
                 webbrowser.open(package)
@@ -66,6 +67,7 @@ def import_or_install_python_package(package):
         try:
             python = get_python_command()
             subprocess.check_call([python, '-m', 'pip', 'install', package])  # install pkg
+
         except:
             print(
                 "Les modules manquants n'ont pas pu etre installés, veuillez vous assurer que tous les modules suivants sont bien présents:")
@@ -73,14 +75,15 @@ def import_or_install_python_package(package):
 
 def get_python_command():
     try:
-        subprocess.check_call(["python3"])
+        subprocess.check_call(["python3", "--version"])
         return "python3"
     except:
         return "python"
 
 
 # installation des dépendances python
-for package in dependencies: import_or_install_python_package(package)
+for package in dependencies:
+    import_or_install_python_package(package)
 
 # installtion des packages requis
 os_packages = {}
@@ -88,6 +91,7 @@ if os.name == "posix": os_packages = linux_packages  # Linux
 if os.name == "darwin": os_packages = macos_packages  # MacOS
 if os.name == "windows": os_packages = windows_packages  # Windows
 for package, py_import in linux_packages.items(): import_or_install_os_package(package, py_import)
+
 
 # Lancement de la vue
 

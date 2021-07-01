@@ -1,8 +1,8 @@
 from PIL import Image
-from keras.preprocessing import image
+from tensorflow.keras.preprocessing import image
 import numpy as np
-from keras.applications.inception_v3 import preprocess_input
-from keras.models import load_model
+from tensorflow.keras.applications.inception_v3 import preprocess_input
+from tensorflow.keras.models import load_model
 import tensorflow as tf
 
 from global_variables import *

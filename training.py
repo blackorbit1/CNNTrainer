@@ -15,15 +15,15 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
     print("\n")
     print(os.getcwd())
 
-    from keras.callbacks import TensorBoard
-    from keras.applications.inception_v3 import preprocess_input
-    from keras.models import Model
-    from keras.layers import Dense
-    from keras.preprocessing.image import ImageDataGenerator
+    from tensorflow.keras.callbacks import TensorBoard
+    from tensorflow.keras.applications.inception_v3 import preprocess_input
+    from tensorflow.keras.models import Model
+    from tensorflow.keras.layers import Dense
+    from tensorflow.keras.preprocessing.image import ImageDataGenerator
 
 
 
-    from keras.callbacks import ModelCheckpoint
+    from tensorflow.keras.callbacks import ModelCheckpoint
 
 
 
@@ -80,7 +80,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
             model = add_new_last_layer(base_model, nb_classes)
             model.load_weights(dir_modele)
         else:
-            from keras.models import load_model
+            from tensorflow.keras.models import load_model
             print("\nchargement du modele ...")
             model = load_model(dir_modele)
             print("chargement du modele terminé\n")
