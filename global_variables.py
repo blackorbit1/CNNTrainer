@@ -6,7 +6,7 @@ TENSORBOARD_LOG_PATH = "./logs"
 LOGO_PATH = "CNNTrainer/top_logo.png"
 
 # GENERATED FILES
-AUTO_SAVED_MODEL_NAME = "-wi-{epoch:02d}-{val_acc:.2f}.hdf5"
+AUTO_SAVED_MODEL_NAME = "-wi-{epoch:02d}.hdf5"
 
 # VIEW SETTINGS
 WINDOW_WIDTH = 400

@@ -133,9 +133,9 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
 
 
 
-    filepath = dir_modele + "-wi-{epoch:02d}-{val_acc:.2f}.hdf5"
-    checkpoint = ModelCheckpoint(filepath, monitor='val_acc', verbose=1, save_best_only=True, mode='max')
-    callbacks_list = [checkpoint, checkpoint, tensorboard]
+    filepath = dir_modele + AUTO_SAVED_MODEL_NAME # "-wi-{epoch:02d}-{val_acc:.2f}.hdf5"
+    checkpoint = ModelCheckpoint(filepath, monitor='val_accuracy', verbose=1, save_best_only=True, mode='max')
+    callbacks_list = [checkpoint, tensorboard]
 
     print("\n\n--- --- Lancement de l'entrainement --- ---\n")
 
