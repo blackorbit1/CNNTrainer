@@ -20,6 +20,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
     from tensorflow.keras.models import Model
     from tensorflow.keras.layers import Dense
     from tensorflow.keras.preprocessing.image import ImageDataGenerator
+    from tensorflow.keras.losses import SparseCategoricalCrossentropy
 
 
 
@@ -40,7 +41,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
 
     # data prep
     train_datagen = ImageDataGenerator(
-        preprocessing_function=preprocess_input,
+        #preprocessing_function=preprocess_input,
         rotation_range=180,
         width_shift_range=0.4,
         height_shift_range=0.4,
@@ -56,10 +57,11 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
         dir_train,
         target_size=(IM_WIDTH, IM_HEIGHT),
         batch_size=batch_size,
+        class_mode='binary'
     )
 
     test_datagen = ImageDataGenerator(
-        preprocessing_function=preprocess_input,
+        #preprocessing_function=preprocess_input,
         rotation_range=30,
         width_shift_range=0.1,
         height_shift_range=0.1,
@@ -72,6 +74,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
         dir_validation,
         target_size=(IM_WIDTH, IM_HEIGHT),
         batch_size=batch_size,
+        class_mode='binary'
     )
 
     if reprise:
@@ -105,7 +108,11 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
             layer.trainable = False
 
         optimizer = get_optimiser(pas_preentrainement, optimiseur_preentrainement)
-        model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+        model.compile(
+            optimizer=optimizer,
+            loss=SparseCategoricalCrossentropy(from_logits=False),
+            metrics=['accuracy']
+        )
 
         print("\n\n--- --- Lancement du pré-entrainement --- ---\n")
         history_tl = model.fit_generator(
@@ -129,7 +136,11 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
             layer.trainable = True
 
     optimizer = get_optimiser(pas_preentrainement, optimiseur_preentrainement)
-    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(
+        optimizer=optimizer,
+        loss=SparseCategoricalCrossentropy(from_logits=False),
+        metrics=['accuracy']
+    )
 
 
 
@@ -139,6 +150,7 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
 
     print("\n\n--- --- Lancement de l'entrainement --- ---\n")
 
+    """
     history_ft = model.fit_generator(
         train_generator,  # generateur de nouvelles image d'entrainement
         #samples_per_epoch=dir_train_nb_fic,  # nb de fichiers d'entrainement
@@ -154,8 +166,20 @@ def run_training(bouton_lancer_entrainement, nb_layers_to_freeze, change_nb_l_to
         shuffle=True
         # verbose=2
     )
+    """
 
-    time.sleep(10000)
+    history_ft = model.fit(
+        train_generator, # generateur de nouvelles images d'entrainement
+        epochs=nb_epoch_entrainement,  # nb de cycles d'entrainement
+        validation_data=validation_generator,
+        validation_steps=dir_validation_nb_fic // batch_size,  # nb fic validation / taille tampon
+        callbacks=callbacks_list,
+        workers=1,  # nb d'user travaillant dessus (laisser 1 si GPU)
+        use_multiprocessing=False,  # laisser False si GPU TODO : à retenir si mise en place d'une option CPU / GPU
+        shuffle=True
+    )
+
+    time.sleep(1)
 
 
     print("""

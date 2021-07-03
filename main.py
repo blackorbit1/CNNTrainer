@@ -10,7 +10,8 @@ dependencies = [
     "ntpath",
     "matplotlib",
     "tensorflow",
-    "keras",
+    "tensorboard", # linux : ~/.local/bin/tensorboard  --->  http://localhost:6006/ --host --port
+    #"keras",
     "numpy",
     "pillow",
     "webbrowser",
@@ -85,7 +86,7 @@ def get_python_command():
 for package in dependencies:
     import_or_install_python_package(package)
 
-# installtion des packages requis
+# installation des packages requis
 os_packages = {}
 if os.name == "posix": os_packages = linux_packages  # Linux
 if os.name == "darwin": os_packages = macos_packages  # MacOS
